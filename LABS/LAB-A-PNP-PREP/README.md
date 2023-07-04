@@ -58,7 +58,7 @@ Follow this guide for more information on the finer details.
 </details>
 
 ### Step 1.1 - ***Upstream Neighbor Setup***
-As depicted in the ![json](./images/DCLOUD_Topology_PnPLab2.png?raw=true "Import JSON"), the 9300 will serve as the upstream neighbor for this exercise and the environment's distribution switch. The Catalyst 9300 will act as the target switch, which we will deploy via PnP and Day 0 and N templates.
+As depicted in the topology diagram above, Catalyst 9300-2 will serve as the upstream neighbor for this exercise and the environment's distribution switch. The Catalyst 9300-1 will act as the target switch, which we will deploy via PnP and Day 0 and N templates.
 
 For the lab, we will utilize ***VLAN 5*** as the management VLAN. Connect to switch ***c9300-2*** and paste the following configuration:
 
@@ -82,8 +82,62 @@ wr
 
 The ***pnp startup-vlan 5*** command will program the target switches port connected with a trunk and automatically add the vlan and SVI to the target switch making that vlan ready to accept a DHCP address. The feature is available on switches running IOS-XE 16.6 code or greater as upstream neighbors. Older switches or upstream devices that cannot run the command should utilize VLAN 1 and then set up the correct management VLAN modified as part of the onboarding process.
 
+We also need to ensure that our upstream ***c9300-2*** switch has IP reachability to DNA Center. You will notice that ***c9300-2*** switch interface Gi1/0/48 is connected via L2 segment passing through ***c9300-3*** to ***4331*** router Gi0/0/2 interface. The upstream switch ***c9300-2*** and ***4331*** should establish OSPF adjacency. 
+
+Confirm that ***c9300-2*** device uplink interface Gi1/0/48 is configured as follows
+
+```vtl
+config t
+!
+interface GigabitEthernet1/0/48
+ no switchport
+ ip address 198.19.2.2 255.255.255.252
+ ip ospf 1 area 0
+end
+!
+wr
+!
+```
+
+Confirm on ***c9300-2*** we have required OSPF received routes:
+
+```vtl
+Switch#sh ip route
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is 198.19.2.1 to network 0.0.0.0
+
+O*E2  0.0.0.0/0 [110/1] via 198.19.2.1, 00:04:49, GigabitEthernet1/0/48
+      192.168.5.0/24 is variably subnetted, 2 subnets, 2 masks
+C        192.168.5.0/24 is directly connected, Vlan5
+L        192.168.5.1/32 is directly connected, Vlan5
+O     198.18.128.0/18 [110/2] via 198.19.2.1, 00:04:49, GigabitEthernet1/0/48
+      198.19.2.0/24 is variably subnetted, 2 subnets, 2 masks
+C        198.19.2.0/30 is directly connected, GigabitEthernet1/0/48
+```
+
+Also confirm that the upstream ***c9300-2*** switch can reach DNA Center IP address
+
+```vtl
+Switch#ping 198.18.129.100 
+Type escape sequence to abort.
+Sending 5, 100-byte ICMP Echos to 198.18.129.100, timeout is 2 seconds:
+!!!!!
+Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/1 ms
+```
 ### Step 1.2 - ***DHCP Setup***
-We need a DHCP scope to temporarily supply the address within the management network to complete the configuration and onboarding. Configure the scope to offer IP addresses from the part of the address's range, leaving the other part of the scope for static addresses. You could also make use of reservations as DHCP servers can reserve addresses for specific MAC addresses. One benefit of this is that DNS host entries are automatically updated depending on the DHCP Server.
+We need a DHCP scope to temporarily supply the address within the management network to complete the configuration and onboarding. Configure the scope to offer IP addresses from one part of the address's range, leaving the other part of the scope for static addresses. You could also make use of reservations as DHCP servers can reserve addresses for specific MAC addresses. One benefit of this is that DNS host entries are automatically updated depending on the DHCP Server.
 
 The DHCP scope should therefore incorporate the following minimal configuration:
 
@@ -257,13 +311,13 @@ The DNS Zone will look like this in Windows DNS Administrative tool:
 ## Lab Section 3 - Target Connectivity
 Typically, the Target switch is connected via a trunk to a single port or a bundle of ports as part of a port channel. 
 
-If it is a single port connection to the target switch, then use a simplified configuration; however, we will not be utilizing this method in this lab. An example provided here:
+If it is a single port connection to the target switch, then use a simplified configuration; however, we will not be utilizing this method in this lab. An example provided here. Theoretical example of a single physical interface configuration on a parent switch:
 
 ```vtl
 !
 conf t
 !
-  interface range gi 1/0/10
+  interface gi 1/0/10
      description PnP Test Environment to Cataylist 9300
      switchport mode trunk
      switchport trunk allowed vlan 5
@@ -273,7 +327,7 @@ wr
 !
 ```
 
-In this exercise, the port where the Target switch connects is a layer two trunk as part of a Port Channel. 
+In this exercise, the port where the Target switch connects is a layer two trunk as part of a Port Channel. While connected to ***c9300-2*** console:
 
 ```vtl
 !
@@ -300,6 +354,12 @@ wr
 ```
 
 If we are using a port-channel initially, you want to ensure that the port-channel can operate as a single link within the bundle and, for that reason, use passive methods for building the port-channel bundles on both the Target and Upstream Neighbor for maximum flexibility. Additionally, add the **no port-channel standalone-disable** command to ensure the switch does not automatically disable the port-channel if it does not come up properly.
+
+It is expected output to see native vlan mismatch message in the console since the downstream ***c9300-2*** is configured by default with Vlan 1
+
+```
+*Jul  4 15:17:45.817: %CDP-4-NATIVE_VLAN_MISMATCH: Native VLAN mismatch discovered on GigabitEthernet1/0/10 (5), with c9300-1.dcloud.cisco.com GigabitEthernet1/0/10 (1).
+```
 
 ## Lab Section 4 - Testing
 Please use the testing for the DNS Discovery method used above.
@@ -329,9 +389,9 @@ ping pnpserver.dcloud.cisco.com
 At this point, the environment should be set up to onboard devices within VLAN 5 using the network address ***192.168.5.0/24*** utilizing either ***option 43*** or ***DNS discovery ***.
 
 ### Step 4.2 - ***Reset EEM Script or PnP Service Reset***
-When testing, you will frequently need to start again on the switch to test the whole flow. To accomplish this, paste this small script into the 9300 target switch, which will create a file on flash which you may load into the running-configuration at any time to reset the device to factory settings:
+When testing, you will frequently need to start again on the switch to test the whole flow. To accomplish this, paste this small script into the ***c9300-1*** target switch, which will create a file on flash which you may load into the running-configuration at any time to reset the device to factory settings:
 
-There are now two methods for this The first and simplest method is to make use of the `pnp service reset` command as advised by Matthew Bishop. This command was introduced in a recent Train of XE code.
+There are now two methods for this The first and simplest method is to make use of the `pnp service reset` command as advised by Matthew Bishop. This command was introduced in a recent Train of IOS-XE code.
 
 Failing that we have an EEM script which you may use iterated below.
 
@@ -406,6 +466,7 @@ prep4dnac
 ```
 
 The Switch should reboot and display this eventually in the console which acknowledges that the 9300 has discovered the DNA Center.
+In DCLOUD tab, click on JumpHost icon, select 'Connect'. In the new tab that opens with RDP session to Jump Host, start Google Chrome and select DNAC
 
 ![json](./images/DNAC-IPV4-DISCOVERY.png?raw=true "Import JSON")
 
