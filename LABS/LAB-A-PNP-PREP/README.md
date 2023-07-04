@@ -4,7 +4,7 @@ This lab is the first one in a series of labs. You may use the steps in the [Cis
 
 We will be utilizing the lab in this manner:
 SJC Topology
-![json](./images/DCLOUD_Topology_PnPLab2.png?raw=true "Import JSON")
+![json](./images/DCLOUD_Topology_PnPLab.png?raw=true "Import JSON")
 
 ## General Information
 As you may recall, in the informational sections of this repository, we described various methods of discovery for a device and the preliminary things required for proper zero-touch provisioning. This lab will ensure a successful connection to DNA Center by helping to deploy the initial concepts.
